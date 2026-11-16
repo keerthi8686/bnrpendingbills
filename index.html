@@ -1724,7 +1724,7 @@
     }
 
     function escapeJs(str) {
-      return String(str || "").replace(/\/g, "\\").replace(/'/g, "\'");
+      return String(str || "").replace(/\\/g, "\\\\").replace(/'/g, "\\'");
     }
 
     function showToast(message, type = "info") {
@@ -1751,7 +1751,7 @@
         if (localSaved) {
           appState = JSON.parse(localSaved);
         }
-      } else (e) {
+      } catch (e) {
         console.warn("Could not read localStorage:", e);
       }
 
