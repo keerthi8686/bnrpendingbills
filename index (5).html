@@ -1,0 +1,1765 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bannur Road Workshop - Pending Bills &amp; History Manager</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- SheetJS (XLSX) for reading and writing Excel files -->
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+  <!-- Google Fonts: Inter -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: #f8fafc;
+      color: #0f172a;
+    }
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #f1f5f9;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #94a3b8;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+  <!-- Toast Notification Banner -->
+  <div id="toastContainer" class="fixed bottom-4 right-4 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none"></div>
+
+  <!-- Top Navigation & Live Cloud Sync Bar -->
+  <header class="bg-slate-900 text-white shadow-md sticky top-0 z-30">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+      <div id="secretTitleTrigger" onclick="handleSecretTitleClick()" class="flex items-center gap-3 select-none cursor-pointer" title="Bannur Road Workshop">
+        <div class="bg-indigo-600 p-2.5 rounded-xl shadow-inner">
+          <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h1 class="text-lg sm:text-xl font-bold tracking-tight">Bannur Road Workshop</h1>
+            <span id="modeBadge" class="hidden px-2 py-0.5 text-[10px] font-bold uppercase rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">Edit &amp; Sync Mode</span>
+          </div>
+          <p class="text-xs text-slate-300">Live Cloud Sync • Pending Bills &amp; Bill History Manager</p>
+        </div>
+      </div>
+
+      <!-- Live Sync & Mode Controls -->
+      <div class="flex flex-wrap items-center gap-2">
+        <!-- Cloud Sync Status Pill -->
+        <div id="cloudStatusBadge" class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-xs">
+          <span id="statusDot" class="w-2.5 h-2.5 rounded-full bg-amber-400"></span>
+          <span id="statusText" class="text-slate-200 font-medium">Connecting to Cloud...</span>
+        </div>
+
+        <!-- Refresh / Sync Now Button -->
+        <button id="btnSyncNow" onclick="pullFromCloud(true)" class="hidden flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white text-xs sm:text-sm font-semibold px-3 py-2 rounded-xl shadow transition cursor-pointer" title="Fetch latest synced data from Google Cloud">
+          <svg id="syncIcon" class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+          <span>Sync Now</span>
+        </button>
+
+        <!-- Lock Read-Only Button (Hidden when already Read-Only) -->
+        <button id="btnToggleMode" onclick="lockReadOnlyMode()" class="hidden flex items-center gap-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs sm:text-sm font-semibold px-3 py-2 rounded-xl shadow transition cursor-pointer">
+          <svg id="lockIcon" class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+          </svg>
+          <span id="btnToggleModeText">Lock Edit Mode</span>
+        </button>
+
+        <!-- Cloud Setup Button (Only visible in Edit Mode) -->
+        <button id="btnCloudSetup" onclick="openCloudSetupModal()" class="hidden flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs sm:text-sm font-semibold px-3 py-2 rounded-xl shadow transition cursor-pointer">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" />
+          </svg>
+          <span>Cloud Setup</span>
+        </button>
+
+        <!-- Manual Backup Dropdown / Buttons -->
+        <div id="backupRestoreGroup" class="hidden flex items-center gap-1.5 border-l border-slate-700 pl-2">
+          <button onclick="exportJsonBackup()" title="Download JSON Backup File" class="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium px-2.5 py-2 rounded-xl border border-slate-700 transition cursor-pointer">
+            Backup
+          </button>
+          <label id="restoreBackupLabel" title="Restore from JSON Backup File" class="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium px-2.5 py-2 rounded-xl border border-slate-700 transition cursor-pointer">
+            Restore
+            <input id="restoreBackupInput" type="file" accept=".json" onchange="importJsonBackup(event)" class="hidden" />
+          </label>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+
+    <!-- Three Workflow Cards -->
+    <section id="adminWorkflowSection" class="hidden grid grid-cols-1 lg:grid-cols-3 gap-5">
+      <!-- Step 1: One-Time Seed / Master Pending Tracker -->
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 flex flex-col justify-between">
+        <div>
+          <div class="flex items-center justify-between gap-2 mb-2">
+            <span class="text-[11px] font-bold uppercase tracking-wider text-slate-700 bg-slate-100 px-2.5 py-1 rounded-lg">Step 1 • One-Time Seed</span>
+            <span id="masterLastLoaded" class="text-[11px] text-slate-400 truncate max-w-[140px]">Not loaded</span>
+          </div>
+          <h2 class="text-base font-bold text-slate-800">Existing Pending_Bills_Tracker</h2>
+          <p class="text-xs text-slate-500 mt-1">
+            Upload <code class="text-slate-700 font-medium">Pending_Bills_Tracker (.xlsm/.xlsx)</code> to import existing <code class="text-slate-700 font-medium">Master_Pending</code> remarks &amp; seed history.
+          </p>
+        </div>
+        <div class="mt-4">
+          <label class="flex items-center justify-center gap-2 w-full py-2.5 px-3 rounded-xl border-2 border-dashed border-slate-300 hover:border-slate-500 hover:bg-slate-50 text-slate-700 text-xs sm:text-sm font-semibold transition cursor-pointer">
+            <svg class="w-4 h-4 text-slate-600 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+            </svg>
+            <span>Upload Pending_Bills_Tracker</span>
+            <input type="file" accept=".xlsx,.xlsm,.xls" onchange="handleMasterTrackerUpload(event)" class="hidden" />
+          </label>
+        </div>
+      </div>
+
+      <!-- Step 2: Daily RealBooks Report -->
+      <div class="bg-white rounded-2xl border-2 border-indigo-200 shadow-sm p-5 flex flex-col justify-between relative">
+        <div>
+          <div class="flex items-center justify-between gap-2 mb-2">
+            <span class="text-[11px] font-bold uppercase tracking-wider text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded-lg">Step 2 • Daily RealBooks</span>
+            <span id="realbooksLastLoaded" class="text-[11px] text-slate-400 truncate max-w-[140px]">Waiting for file</span>
+          </div>
+          <h2 class="text-base font-bold text-slate-800">Daily RealBooks Status Report</h2>
+          <p class="text-xs text-slate-500 mt-1">
+            Upload <code class="text-slate-700 font-medium">Bill_Status_Report.xlsx</code>. Filters <strong>Bannur Road Workshop</strong>, tracks Paid/Balance updates, &amp; syncs to cloud.
+          </p>
+        </div>
+        <div class="mt-4">
+          <label class="flex items-center justify-center gap-2 w-full py-2.5 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white text-xs sm:text-sm font-semibold shadow-sm transition cursor-pointer">
+            <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+            </svg>
+            <span>Upload Daily RealBooks Report</span>
+            <input type="file" accept=".xlsx,.xlsm,.xls" onchange="handleRealBooksUpload(event)" class="hidden" />
+          </label>
+        </div>
+      </div>
+
+      <!-- Step 3: Weekly Accounts Analysis Report -->
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 flex flex-col justify-between">
+        <div>
+          <div class="flex items-center justify-between gap-2 mb-2">
+            <span class="text-[11px] font-bold uppercase tracking-wider text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg">Step 3 • Weekly Accounts</span>
+            <span id="analysisLastLoaded" class="text-[11px] text-slate-400 truncate max-w-[140px]">Waiting for file</span>
+          </div>
+          <h2 class="text-base font-bold text-slate-800">Weekly Accounts Analysis Report</h2>
+          <p class="text-xs text-slate-500 mt-1">
+            Upload <code class="text-slate-700 font-medium">Analysis Report.xlsx</code> (<code class="text-slate-700">BC, BR, BI, MCP, CCP, FSC</code>). Filters Bannur Road, maps Remarks, &amp; exports clean Excel.
+          </p>
+          <div id="weeklySummaryStrip" class="hidden mt-2 flex flex-wrap gap-1 text-[10px] font-semibold text-emerald-800"></div>
+        </div>
+        <div class="mt-4 flex flex-col sm:flex-row gap-2">
+          <label class="flex-1 flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold shadow-sm transition cursor-pointer">
+            <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            <span>Upload Analysis Report</span>
+            <input type="file" accept=".xlsx,.xlsm,.xls" onchange="handleAnalysisReportUpload(event)" class="hidden" />
+          </label>
+
+          <button id="btnDownloadFilteredAnalysis" onclick="downloadFilteredAnalysisReport()" disabled class="flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-200 disabled:text-slate-400 text-white text-xs font-semibold shadow-sm transition cursor-pointer disabled:cursor-not-allowed" title="Download Filtered 6-Sheet Analysis Report + Master_Pending">
+            <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+            <span>Download Filtered Excel</span>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- KPI Summary Cards (5 Cards) -->
+    <section class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5">
+      <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm">
+        <p class="text-xs font-medium text-slate-500">Total Active Bills</p>
+        <p id="kpiActiveCount" class="text-xl sm:text-2xl font-bold text-slate-900 mt-1">0</p>
+        <p id="kpiNewTodayCount" class="text-xs text-indigo-600 font-medium mt-1">0 new today</p>
+      </div>
+
+      <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm">
+        <p class="text-xs font-medium text-slate-500">Total Pending Balance</p>
+        <p id="kpiTotalBalance" class="text-xl sm:text-2xl font-bold text-indigo-600 mt-1">₹0.00</p>
+        <p id="kpiBlankRemarks" class="text-xs text-amber-600 font-medium mt-1">0 blank remarks</p>
+      </div>
+
+      <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm">
+        <p class="text-xs font-medium text-slate-500">Insurance (BI) Pending</p>
+        <p id="kpiInsuranceBalance" class="text-xl sm:text-2xl font-bold text-purple-700 mt-1">₹0.00</p>
+        <p id="kpiInsuranceCount" class="text-xs text-slate-400 mt-1">0 bills</p>
+      </div>
+
+      <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm">
+        <p class="text-xs font-medium text-slate-500">Cash/Retail (BC/BR)</p>
+        <p id="kpiRetailBalance" class="text-xl sm:text-2xl font-bold text-sky-700 mt-1">₹0.00</p>
+        <p id="kpiRetailCount" class="text-xs text-slate-400 mt-1">0 bills</p>
+      </div>
+
+      <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm col-span-2 sm:col-span-1">
+        <p class="text-xs font-medium text-slate-500">Cleared Bills Count</p>
+        <p id="kpiClearedCount" class="text-xl sm:text-2xl font-bold text-emerald-600 mt-1">0</p>
+        <p id="kpiTotalTracked" class="text-xs text-slate-400 mt-1">0 total in history DB</p>
+      </div>
+    </section>
+
+    <!-- Search, Filter & Interactive Table Section -->
+    <section class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+      <!-- Filter Toolbar -->
+      <div class="p-4 border-b border-slate-200 space-y-3">
+        <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+          <!-- Search Box -->
+          <div class="relative flex-1 max-w-lg">
+            <svg class="w-4 h-4 text-slate-400 absolute left-3.5 top-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            <input type="text" id="searchInput" oninput="resetPageAndRender()" placeholder="Search Party Name, Vehicle No (KA09...), Bill No, Salesman, Remarks..." class="w-full pl-10 pr-4 py-2 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition" />
+          </div>
+
+          <!-- Remark Filter & Export Master_Pending Button -->
+          <div class="flex flex-wrap items-center gap-2">
+            <select id="remarkFilter" onchange="resetPageAndRender()" class="text-xs sm:text-sm bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              <option value="ALL">All Remarks</option>
+              <option value="BLANK">Blank Remarks Only</option>
+              <option value="FILLED">Has Remarks Only</option>
+            </select>
+
+            <button id="btnExportMasterPending" onclick="exportMasterPendingExcel()" class="hidden flex items-center gap-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs sm:text-sm font-semibold px-3.5 py-2 rounded-xl shadow-xs transition cursor-pointer">
+              <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              <span>Export Master_Pending (.xlsx)</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Status Filter Pills & Ledger/Type Filter Pills -->
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-2.5 pt-1">
+          <!-- Status Pills -->
+          <div class="flex flex-wrap items-center gap-1.5" id="statusPills">
+            <span class="text-[11px] font-bold uppercase text-slate-400 mr-1">Status:</span>
+            <button onclick="setStatusFilter('ACTIVE')" data-status="ACTIVE" class="status-pill active px-3 py-1 rounded-lg text-xs font-semibold bg-indigo-600 text-white cursor-pointer">Active</button>
+            <button onclick="setStatusFilter('NEW_TODAY')" data-status="NEW_TODAY" class="status-pill px-3 py-1 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 cursor-pointer">New Today</button>
+            <button onclick="setStatusFilter('CLEARED')" data-status="CLEARED" class="status-pill px-3 py-1 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 cursor-pointer">Cleared</button>
+            <button onclick="setStatusFilter('ALL')" data-status="ALL" class="status-pill px-3 py-1 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 cursor-pointer">All</button>
+          </div>
+
+          <!-- Ledger / Type Pills -->
+          <div class="flex flex-wrap items-center gap-1.5" id="categoryPills">
+            <span class="text-[11px] font-bold uppercase text-slate-400 mr-1">Type:</span>
+            <button onclick="setCategoryFilter('ALL')" data-cat="ALL" class="cat-pill active px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-900 text-white cursor-pointer">All</button>
+            <button onclick="setCategoryFilter('BC')" data-cat="BC" class="cat-pill px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 cursor-pointer">BC</button>
+            <button onclick="setCategoryFilter('BR')" data-cat="BR" class="cat-pill px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 cursor-pointer">BR</button>
+            <button onclick="setCategoryFilter('BI')" data-cat="BI" class="cat-pill px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 cursor-pointer">BI</button>
+            <button onclick="setCategoryFilter('MCP')" data-cat="MCP" class="cat-pill px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 cursor-pointer">MCP</button>
+            <button onclick="setCategoryFilter('CCP')" data-cat="CCP" class="cat-pill px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 cursor-pointer">CCP</button>
+            <button onclick="setCategoryFilter('FSC')" data-cat="FSC" class="cat-pill px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 cursor-pointer">FSC</button>
+            <button onclick="setCategoryFilter('Debtors (DMS)')" data-cat="Debtors (DMS)" class="cat-pill px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 cursor-pointer">Debtors (DMS)</button>
+            <button onclick="setCategoryFilter('Insurance')" data-cat="Insurance" class="cat-pill px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 cursor-pointer">Insurance</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Data Table -->
+      <div class="overflow-x-auto max-h-[580px]">
+        <table class="w-full text-left border-collapse">
+          <thead class="bg-slate-100 text-slate-600 text-xs uppercase font-bold sticky top-0 z-10 border-b border-slate-200">
+            <tr>
+              <th class="py-3 px-3">Party Name &amp; Vehicle No</th>
+              <th class="py-3 px-3">Date</th>
+              <th class="py-3 px-3">Bill No</th>
+              <th class="py-3 px-3">Ledger / Type</th>
+              <th class="py-3 px-3 text-right">Bill Amt</th>
+              <th class="py-3 px-3 text-right">Paid Amt</th>
+              <th class="py-3 px-3 text-right">Balance Amt</th>
+              <th class="py-3 px-3 text-center">Due Since</th>
+              <th class="py-3 px-3">Salesman</th>
+              <th class="py-3 px-3 min-w-[220px]">REMARKS</th>
+              <th class="py-3 px-3 text-center">History</th>
+            </tr>
+          </thead>
+          <tbody id="billsTableBody" class="divide-y divide-slate-200 text-xs sm:text-sm">
+            <tr>
+              <td colspan="11" class="py-12 text-center text-slate-400">
+                Loading bills from cloud...
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Pagination & Table Footer -->
+      <div class="px-4 py-3 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-slate-600">
+        <div id="tableCountInfo" class="font-medium">Showing 0 bills</div>
+        <div class="flex items-center gap-2">
+          <button id="btnPrevPage" onclick="changePage(-1)" disabled class="px-3 py-1.5 rounded-lg bg-white border border-slate-300 hover:bg-slate-100 disabled:opacity-40 font-semibold cursor-pointer disabled:cursor-not-allowed">
+            &larr; Prev
+          </button>
+          <span id="pageIndicator" class="font-semibold text-slate-800 px-2">Page 1 of 1</span>
+          <button id="btnNextPage" onclick="changePage(1)" disabled class="px-3 py-1.5 rounded-lg bg-white border border-slate-300 hover:bg-slate-100 disabled:opacity-40 font-semibold cursor-pointer disabled:cursor-not-allowed">
+            Next &rarr;
+          </button>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Datalist for Quick Remark Suggestions -->
+  <datalist id="remarkSuggestions">
+    <option value="INSURANCE CO">
+    <option value="AUTOCARD">
+    <option value="SMP">
+    <option value="DISCOUNT">
+    <option value="EW">
+    <option value="CLEARED">
+    <option value="NEW">
+    <option value="CCP">
+    <option value="ROUND OFF">
+    <option value="VND">
+  </datalist>
+
+  <!-- Secret Admin PIN Unlock Modal -->
+  <div id="pinUnlockModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-sm w-full overflow-hidden">
+      <div class="px-5 py-4 bg-slate-900 text-white flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <svg class="w-5 h-5 text-amber-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+          </svg>
+          <h3 class="text-base font-bold">Admin PIN Required</h3>
+        </div>
+        <button onclick="closePinModal()" class="p-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition cursor-pointer">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+      <div class="p-5 space-y-4">
+        <p class="text-xs text-slate-600">Enter your 4-digit Admin PIN to unlock Excel uploads and Remark editing.</p>
+        <input
+          type="password"
+          id="adminPinInput"
+          maxlength="8"
+          inputmode="numeric"
+          placeholder="••••"
+          onkeydown="if(event.key==='Enter') verifyAdminPin()"
+          class="w-full text-center text-2xl tracking-[0.5em] font-bold bg-slate-50 border border-slate-300 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        />
+        <div class="flex gap-2">
+          <button onclick="closePinModal()" class="flex-1 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs sm:text-sm font-semibold transition cursor-pointer">
+            Cancel
+          </button>
+          <button onclick="verifyAdminPin()" class="flex-1 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs sm:text-sm font-semibold shadow-sm transition cursor-pointer">
+            Unlock
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Cloud Sync Setup Modal -->
+  <div id="cloudSetupModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden">
+      <div class="px-6 py-4 bg-slate-900 text-white flex items-center justify-between">
+        <div>
+          <h3 class="text-lg font-bold">Live Cloud Sync Setup (Google Sheets)</h3>
+          <p class="text-xs text-slate-300 mt-0.5">Pre-configured for Bannur Road Workshop</p>
+        </div>
+        <button onclick="closeCloudSetupModal()" class="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition cursor-pointer">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+
+      <div class="p-6 overflow-y-auto space-y-4 text-xs sm:text-sm text-slate-700">
+        <div class="bg-indigo-50 border border-indigo-200 rounded-xl p-4 space-y-2">
+          <label class="block text-xs font-bold uppercase tracking-wider text-indigo-900">Google Apps Script Web App URL</label>
+          <div class="flex flex-col sm:flex-row gap-2">
+            <input type="url" id="cloudScriptUrlInput" placeholder="https://script.google.com/macros/s/....../exec" class="flex-1 text-xs sm:text-sm bg-white border border-indigo-300 rounded-xl px-3.5 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            <button onclick="saveCloudScriptUrl()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-semibold px-4 py-2 rounded-xl shadow-sm transition cursor-pointer">
+              Save &amp; Sync Now
+            </button>
+          </div>
+          <p class="text-[11px] text-indigo-800">Your Google Cloud Sync URL is built-in by default, so any phone or PC opens it pre-connected.</p>
+        </div>
+
+        <div class="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-2">
+          <label class="block text-xs font-bold uppercase tracking-wider text-slate-700">Change Admin Unlock PIN (Current Device)</label>
+          <div class="flex gap-2">
+            <input type="password" id="newAdminPinInput" maxlength="8" inputmode="numeric" placeholder="New 4-digit PIN (Default: 8686)" class="flex-1 text-xs sm:text-sm bg-white border border-slate-300 rounded-xl px-3.5 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            <button onclick="saveNewAdminPin()" class="bg-slate-800 hover:bg-slate-700 text-white font-semibold px-4 py-2 rounded-xl transition cursor-pointer">
+              Update PIN
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="px-6 py-3 bg-slate-50 border-t border-slate-200 flex justify-between items-center">
+        <button onclick="resetToDefaultCloudUrl()" class="text-xs text-indigo-600 hover:underline font-medium cursor-pointer">Reset to Default URL</button>
+        <button onclick="closeCloudSetupModal()" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs sm:text-sm font-semibold transition cursor-pointer">
+          Close
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bill History & Follow-Up Modal -->
+  <div id="historyModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-40 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden">
+      <div class="px-6 py-4 bg-slate-900 text-white flex items-center justify-between">
+        <div>
+          <div class="flex items-center gap-2">
+            <span id="modalCategoryBadge" class="px-2 py-0.5 text-xs font-bold rounded bg-indigo-500 text-white">BC</span>
+            <h3 id="modalBillNo" class="text-lg font-bold tracking-tight">9/BC/26000000</h3>
+            <span id="modalStatusBadge" class="px-2 py-0.5 text-[10px] font-bold uppercase rounded bg-emerald-600 text-white">ACTIVE</span>
+          </div>
+          <p id="modalPartyName" class="text-xs text-slate-300 mt-0.5">Customer Name - KA09...</p>
+        </div>
+        <button onclick="closeHistoryModal()" class="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition cursor-pointer">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+
+      <div class="p-6 overflow-y-auto space-y-5 flex-1">
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50 p-3.5 rounded-xl border border-slate-200">
+          <div>
+            <p class="text-[11px] text-slate-500 uppercase font-semibold">Bill Date</p>
+            <p id="modalBillDate" class="text-sm font-bold text-slate-800 mt-0.5">-</p>
+          </div>
+          <div>
+            <p class="text-[11px] text-slate-500 uppercase font-semibold">Salesman</p>
+            <p id="modalSalesman" class="text-sm font-bold text-slate-800 mt-0.5">-</p>
+          </div>
+          <div>
+            <p class="text-[11px] text-slate-500 uppercase font-semibold">Current Balance</p>
+            <p id="modalBalance" class="text-sm font-bold text-indigo-600 mt-0.5">₹0.00</p>
+          </div>
+          <div>
+            <p class="text-[11px] text-slate-500 uppercase font-semibold">Current Remark</p>
+            <p id="modalRemark" class="text-sm font-bold text-emerald-700 mt-0.5">-</p>
+          </div>
+        </div>
+
+        <div id="modalEditControls" class="space-y-4">
+          <div class="space-y-1.5">
+            <label class="block text-[11px] font-bold uppercase tracking-wider text-slate-500">Quick Set Remark</label>
+            <div id="modalQuickRemarkChips" class="flex flex-wrap gap-1.5"></div>
+          </div>
+
+          <div class="space-y-2">
+            <label class="block text-xs font-bold uppercase tracking-wider text-slate-700">Add Follow-Up Note / Customer Update</label>
+            <div class="flex gap-2">
+              <input type="text" id="followupNoteInput" placeholder="e.g., Spoke to Madan M - payment tomorrow..." class="flex-1 text-sm border border-slate-300 rounded-xl px-3.5 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500" onkeydown="if(event.key==='Enter') addFollowupNote()" />
+              <button onclick="addFollowupNote()" class="bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold px-4 py-2 rounded-xl shadow-sm transition cursor-pointer">
+                Save Note
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <h4 class="text-xs font-bold uppercase tracking-wider text-slate-700 mb-3">Bill Payment, Remarks &amp; Follow-up Timeline</h4>
+          <div id="modalTimeline" class="space-y-3 border-l-2 border-indigo-200 ml-2 pl-4"></div>
+        </div>
+      </div>
+
+      <div class="px-6 py-3 bg-slate-50 border-t border-slate-200 flex justify-end">
+        <button onclick="closeHistoryModal()" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs sm:text-sm font-semibold transition cursor-pointer">
+          Close History
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const TARGET_SHEETS = ["BC", "BR", "BI", "MCP", "CCP", "FSC"];
+    const TARGET_SEGMENT = "Bannur Road Workshop";
+    const QUICK_REMARKS = ["INSURANCE CO", "AUTOCARD", "SMP", "DISCOUNT", "EW", "CLEARED", "NEW", "CCP", "ROUND OFF", "VND"];
+    const PAGE_SIZE = 50;
+    const CLOUD_URL_STORAGE_KEY = "bannur_cloud_script_url";
+    const LOCAL_DB_STORAGE_KEY = "bannur_bills_fallback_db";
+    const DEFAULT_CLOUD_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxeIltnMLV1SfxKqsv3t4bNTNNBjwwxAtTjJ5sXdX3_f9STRg-e3-QuGwJ0VZ5QInWG8g/exec";
+
+    let appState = {
+      lastUpdated: null,
+      lastMasterImport: null,
+      lastRealBooksImport: null,
+      lastAnalysisImport: null,
+      bills: {}
+    };
+
+    let weeklyFilteredSheets = null;
+    let currentStatusFilter = "ACTIVE";
+    let currentCategoryFilter = "ALL";
+    let currentPage = 1;
+    let activeModalKey = null;
+    let isReadOnly = true;
+
+    const DEFAULT_ADMIN_PIN = "8686";
+    const ADMIN_PIN_STORAGE_KEY = "bannur_admin_pin";
+    let secretClickCount = 0;
+    let secretClickTimer = null;
+
+    function getAdminPin() {
+      return localStorage.getItem(ADMIN_PIN_STORAGE_KEY) || DEFAULT_ADMIN_PIN;
+    }
+
+    function handleSecretTitleClick() {
+      if (!isReadOnly) return;
+      secretClickCount++;
+      clearTimeout(secretClickTimer);
+      if (secretClickCount >= 3) {
+        secretClickCount = 0;
+        openPinModal();
+      } else {
+        secretClickTimer = setTimeout(() => {
+          secretClickCount = 0;
+        }, 700);
+      }
+    }
+
+    function openPinModal() {
+      const input = document.getElementById("adminPinInput");
+      input.value = "";
+      document.getElementById("pinUnlockModal").classList.remove("hidden");
+      setTimeout(() => input.focus(), 50);
+    }
+
+    function closePinModal() {
+      document.getElementById("pinUnlockModal").classList.add("hidden");
+    }
+
+    function verifyAdminPin() {
+      const entered = document.getElementById("adminPinInput").value.trim();
+      if (entered === getAdminPin()) {
+        closePinModal();
+        isReadOnly = false;
+        applyModeUI();
+        showToast("Admin Edit Mode Unlocked!", "success");
+      } else {
+        showToast("Incorrect PIN! Access denied.", "error");
+        const input = document.getElementById("adminPinInput");
+        input.value = "";
+        input.focus();
+      }
+    }
+
+    function saveNewAdminPin() {
+      const val = document.getElementById("newAdminPinInput").value.trim();
+      if (!val || val.length < 4) {
+        showToast("PIN must be at least 4 digits.", "warning");
+        return;
+      }
+      localStorage.setItem(ADMIN_PIN_STORAGE_KEY, val);
+      document.getElementById("newAdminPinInput").value = "";
+      showToast("Admin PIN updated on this browser!", "success");
+    }
+
+    function lockReadOnlyMode() {
+      isReadOnly = true;
+      applyModeUI();
+      showToast("Locked back to Read-Only View.", "info");
+    }
+
+    function applyModeUI() {
+      const modeBadge = document.getElementById("modeBadge");
+      const btnToggle = document.getElementById("btnToggleMode");
+      const btnCloudSetup = document.getElementById("btnCloudSetup");
+      const adminSection = document.getElementById("adminWorkflowSection");
+      const modalEditControls = document.getElementById("modalEditControls");
+      const restoreLabel = document.getElementById("restoreBackupLabel");
+      const btnSyncNow = document.getElementById("btnSyncNow");
+      const backupRestoreGroup = document.getElementById("backupRestoreGroup");
+      const btnExportMasterPending = document.getElementById("btnExportMasterPending");
+
+      if (isReadOnly) {
+        modeBadge.classList.add("hidden");
+        btnToggle.classList.add("hidden");
+        btnCloudSetup.classList.add("hidden");
+        adminSection.classList.add("hidden");
+        modalEditControls.classList.add("hidden");
+        restoreLabel.classList.add("hidden");
+        if (btnSyncNow) btnSyncNow.classList.add("hidden");
+        if (backupRestoreGroup) backupRestoreGroup.classList.add("hidden");
+        if (btnExportMasterPending) btnExportMasterPending.classList.add("hidden");
+      } else {
+        modeBadge.classList.remove("hidden");
+        btnToggle.classList.remove("hidden");
+        btnCloudSetup.classList.remove("hidden");
+        adminSection.classList.remove("hidden");
+        modalEditControls.classList.remove("hidden");
+        restoreLabel.classList.remove("hidden");
+        if (btnSyncNow) btnSyncNow.classList.remove("hidden");
+        if (backupRestoreGroup) backupRestoreGroup.classList.remove("hidden");
+        if (btnExportMasterPending) btnExportMasterPending.classList.remove("hidden");
+      }
+      renderTable();
+    }
+
+    function getCloudUrl() {
+      return localStorage.getItem(CLOUD_URL_STORAGE_KEY) || DEFAULT_CLOUD_SCRIPT_URL;
+    }
+
+    function openCloudSetupModal() {
+      document.getElementById("cloudScriptUrlInput").value = getCloudUrl();
+      document.getElementById("cloudSetupModal").classList.remove("hidden");
+    }
+
+    function closeCloudSetupModal() {
+      document.getElementById("cloudSetupModal").classList.add("hidden");
+    }
+
+    async function saveCloudScriptUrl() {
+      const url = document.getElementById("cloudScriptUrlInput").value.trim();
+      if (!url || !url.startsWith("https://script.google.com/")) {
+        showToast("Please enter a valid Google Apps Script Web App URL.", "error");
+        return;
+      }
+      localStorage.setItem(CLOUD_URL_STORAGE_KEY, url);
+      closeCloudSetupModal();
+      await pullFromCloud(true);
+    }
+
+    async function resetToDefaultCloudUrl() {
+      localStorage.removeItem(CLOUD_URL_STORAGE_KEY);
+      document.getElementById("cloudScriptUrlInput").value = DEFAULT_CLOUD_SCRIPT_URL;
+      closeCloudSetupModal();
+      await pullFromCloud(true);
+    }
+
+    function updateCloudStatusUI(state, text) {
+      const dot = document.getElementById("statusDot");
+      const label = document.getElementById("statusText");
+      label.textContent = text;
+      if (state === "synced") {
+        dot.className = "w-2.5 h-2.5 rounded-full bg-emerald-400";
+      } else if (state === "syncing") {
+        dot.className = "w-2.5 h-2.5 rounded-full bg-sky-400 animate-ping";
+      } else if (state === "error") {
+        dot.className = "w-2.5 h-2.5 rounded-full bg-rose-400";
+      } else {
+        dot.className = "w-2.5 h-2.5 rounded-full bg-amber-400";
+      }
+    }
+
+    async function pullFromCloud(showNotification = false) {
+      const url = getCloudUrl();
+      if (!url) return false;
+
+      const syncIcon = document.getElementById("syncIcon");
+      if (syncIcon) syncIcon.classList.add("animate-spin");
+      updateCloudStatusUI("syncing", "Syncing from Cloud...");
+
+      try {
+        const res = await fetch(url, { method: "GET", redirect: "follow" });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+
+        if (data && data.bills) {
+          appState = data;
+          localStorage.setItem(LOCAL_DB_STORAGE_KEY, JSON.stringify(appState));
+          refreshUI();
+          const count = Object.keys(appState.bills).length;
+          const timeLabel = appState.lastUpdated ? `Synced (${appState.lastUpdated})` : `Live Cloud Synced (${count} bills)`;
+          updateCloudStatusUI("synced", timeLabel);
+          if (showNotification) {
+            showToast(`Live data synced! (${count} bills loaded)`, "success");
+          }
+          return true;
+        }
+        updateCloudStatusUI("synced", "Cloud Connected (Empty DB)");
+        return false;
+      } catch (err) {
+        console.error("Cloud pull error:", err);
+        updateCloudStatusUI("error", "Cloud Sync Error (Showing Cached Data)");
+        if (showNotification) {
+          showToast("Could not reach Google Cloud: " + err.message, "error");
+        }
+        return false;
+      } finally {
+        if (syncIcon) syncIcon.classList.remove("animate-spin");
+      }
+    }
+
+    async function pushToCloud() {
+      const url = getCloudUrl();
+      if (!url) return false;
+
+      updateCloudStatusUI("syncing", "Pushing updates to Cloud...");
+      try {
+        const res = await fetch(url, {
+          method: "POST",
+          redirect: "follow",
+          headers: { "Content-Type": "text/plain;charset=utf-8" },
+          body: JSON.stringify(appState)
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        updateCloudStatusUI("synced", `Live Synced (${appState.lastUpdated})`);
+        return true;
+      } catch (err) {
+        console.error("Cloud push error:", err);
+        updateCloudStatusUI("error", "Saved Locally (Cloud Push Failed)");
+        showToast("Saved locally, but Cloud Sync push failed: " + err.message, "warning");
+        return false;
+      }
+    }
+
+    async function saveDatabase() {
+      appState.lastUpdated = new Date().toLocaleString("en-IN");
+      try {
+        localStorage.setItem(LOCAL_DB_STORAGE_KEY, JSON.stringify(appState));
+      } catch (e) {
+        console.warn("LocalStorage full or restricted:", e);
+      }
+      await pushToCloud();
+    }
+
+    function normalizeStr(str) {
+      return String(str || "").trim().toUpperCase().replace(/\s+/g, " ");
+    }
+
+    function normalizeDate(val) {
+      if (val === null || val === undefined || val === "") return "";
+      if (typeof val === "number") {
+        const utcMillis = Math.round((val - 25569) * 86400 * 1000);
+        const d = new Date(utcMillis);
+        const dd = String(d.getUTCDate()).padStart(2, "0");
+        const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
+        const yyyy = d.getUTCFullYear();
+        return `${dd}-${mm}-${yyyy}`;
+      }
+      const s = String(val).trim();
+      const isoMatch = s.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+      if (isoMatch) {
+        return `${isoMatch[3].padStart(2, "0")}-${isoMatch[2].padStart(2, "0")}-${isoMatch[1]}`;
+      }
+      const dmyMatch = s.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
+      if (dmyMatch) {
+        return `${dmyMatch[1].padStart(2, "0")}-${dmyMatch[2].padStart(2, "0")}-${dmyMatch[3]}`;
+      }
+      return s;
+    }
+
+    function makeCompositeKey(partyName, billNo, dateVal) {
+      return `${normalizeStr(partyName)}|${normalizeStr(billNo)}|${normalizeDate(dateVal)}`;
+    }
+
+    function findExistingBillKey(partyName, billNo, dateVal) {
+      const exactKey = makeCompositeKey(partyName, billNo, dateVal);
+      if (appState.bills[exactKey]) return exactKey;
+
+      const normBill = normalizeStr(billNo);
+      const normParty = normalizeStr(partyName);
+
+      const samePartyAndBill = Object.keys(appState.bills).filter((k) => {
+        const b = appState.bills[k];
+        return normalizeStr(b.billNo) === normBill && normalizeStr(b.partyName) === normParty;
+      });
+      if (samePartyAndBill.length === 1) return samePartyAndBill[0];
+
+      const byBillNoOnly = Object.keys(appState.bills).filter((k) => {
+        return normalizeStr(appState.bills[k].billNo) === normBill;
+      });
+      if (byBillNoOnly.length === 1) return byBillNoOnly[0];
+
+      return null;
+    }
+
+    function inferLedgerType(billNo, ledgerColVal) {
+      const rawLedger = String(ledgerColVal || "").trim();
+      const normBill = normalizeStr(billNo);
+      const parts = normBill.split("/");
+      if (parts.length >= 2 && TARGET_SHEETS.includes(parts[1])) {
+        return parts[1];
+      }
+      if (rawLedger) {
+        if (/insurance/i.test(rawLedger)) return "Insurance";
+        if (/debtors/i.test(rawLedger)) return "Debtors (DMS)";
+        return rawLedger;
+      }
+      return "OTHER";
+    }
+
+    function exportJsonBackup() {
+      const blob = new Blob([JSON.stringify(appState, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `Bannur_Bills_Backup_${getTodayStr()}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast("JSON Backup downloaded!", "success");
+    }
+
+    function importJsonBackup(event) {
+      if (isReadOnly) {
+        showToast("Unlock Edit Mode first to restore backups.", "warning");
+        return;
+      }
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        try {
+          const parsed = JSON.parse(e.target.result);
+          if (parsed && parsed.bills) {
+            appState = parsed;
+            await saveDatabase();
+            refreshUI();
+            showToast(`Restored & synced ${Object.keys(appState.bills).length} bills!`, "success");
+          } else {
+            showToast("Invalid backup JSON format.", "error");
+          }
+        } catch (err) {
+          showToast("Error reading JSON file.", "error");
+        }
+      };
+      reader.readAsText(file);
+      event.target.value = "";
+    }
+
+    function parseNum(val) {
+      if (val === null || val === undefined || val === "") return 0;
+      if (typeof val === "number") return val;
+      const cleaned = String(val).replace(/,/g, "").trim();
+      const num = parseFloat(cleaned);
+      return isNaN(num) ? 0 : num;
+    }
+
+    function handleMasterTrackerUpload(event) {
+      if (isReadOnly) return;
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        try {
+          const data = new Uint8Array(e.target.result);
+          const workbook = XLSX.read(data, { type: "array" });
+
+          const sheetName =
+            workbook.SheetNames.find((s) => s.trim().toLowerCase() === "master_pending") ||
+            workbook.SheetNames[0];
+          const sheet = workbook.Sheets[sheetName];
+          const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
+
+          let importedCount = 0;
+          let remarksCount = 0;
+          const todayLabel = getTodayStr();
+
+          for (let i = 1; i < rows.length; i++) {
+            const row = rows[i];
+            const partyName = String(row[0] || "").trim();
+            const billDate = normalizeDate(row[1]);
+            const billNo = String(row[2] || "").trim();
+            if (!billNo || billNo.toLowerCase() === "bill no") continue;
+
+            const billAmt = parseNum(row[3]);
+            const paidAmt = parseNum(row[4]);
+            const balAmt = parseNum(row[5]);
+            const salesman = String(row[6] || "").trim();
+            let rawRemark = String(row[7] || "").trim();
+            if (rawRemark === "0") rawRemark = "";
+
+            const ledgerType = inferLedgerType(billNo, "");
+            const existingKey = findExistingBillKey(partyName, billNo, billDate);
+
+            if (!existingKey) {
+              const newKey = makeCompositeKey(partyName, billNo, billDate);
+              appState.bills[newKey] = {
+                key: newKey,
+                billNo,
+                partyName,
+                date: billDate,
+                category: ledgerType,
+                ledger: "",
+                billAmount: billAmt,
+                paidAmount: paidAmt,
+                balanceAmount: balAmt,
+                dueSince: 0,
+                salesman,
+                remark: rawRemark,
+                status: "Active",
+                isNew: false,
+                history: [
+                  {
+                    timestamp: todayLabel,
+                    type: "SEED_IMPORT",
+                    note: `Imported from ${sheetName}. Remark: ${rawRemark || "(Blank)"}`,
+                    billAmount: billAmt,
+                    paidAmount: paidAmt,
+                    balanceAmount: balAmt
+                  }
+                ]
+              };
+            } else {
+              const rec = appState.bills[existingKey];
+              if (rawRemark && !rec.remark) {
+                rec.remark = rawRemark;
+                rec.history.unshift({
+                  timestamp: todayLabel,
+                  type: "REMARK",
+                  note: `Remark imported from ${sheetName}: "${rawRemark}"`,
+                  billAmount: rec.billAmount,
+                  paidAmount: rec.paidAmount,
+                  balanceAmount: rec.balanceAmount
+                });
+              }
+            }
+
+            importedCount++;
+            if (rawRemark) remarksCount++;
+          }
+
+          appState.lastMasterImport = `${file.name} (${todayLabel})`;
+          await saveDatabase();
+          refreshUI();
+          showToast(`Seeded & synced ${importedCount} bills (${remarksCount} with remarks)!`, "success");
+        } catch (err) {
+          console.error(err);
+          showToast("Error reading Master Tracker: " + err.message, "error");
+        }
+      };
+      reader.readAsArrayBuffer(file);
+      event.target.value = "";
+    }
+
+    function handleRealBooksUpload(event) {
+      if (isReadOnly) return;
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        try {
+          const data = new Uint8Array(e.target.result);
+          const workbook = XLSX.read(data, { type: "array" });
+          const sheet = workbook.Sheets[workbook.SheetNames[0]];
+          const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
+
+          let reportDateLabel = getTodayStr();
+          let headerRowIdx = -1;
+          let colMap = {};
+
+          for (let r = 0; r < Math.min(rows.length, 20); r++) {
+            const row = rows[r];
+            const rowJoined = row.map((c) => String(c || "").trim()).join(" ");
+
+            const asOnMatch = rowJoined.match(/As\s*On\s*[:\-]?\s*(\d{1,2}[-/]\d{1,2}[-/]\d{2,4})/i);
+            if (asOnMatch) {
+              reportDateLabel = normalizeDate(asOnMatch[1]);
+            }
+
+            const lowerCells = row.map((c) => String(c || "").trim().toLowerCase());
+            if (lowerCells.includes("segment") && lowerCells.includes("party name") && lowerCells.includes("bill no")) {
+              headerRowIdx = r;
+              lowerCells.forEach((h, idx) => {
+                if (h === "segment") colMap.segment = idx;
+                else if (h === "party name") colMap.partyName = idx;
+                else if (h === "date") colMap.date = idx;
+                else if (h === "bill no") colMap.billNo = idx;
+                else if (h === "bill amount") colMap.billAmount = idx;
+                else if (h === "paid amount") colMap.paidAmount = idx;
+                else if (h === "balance amount") colMap.balanceAmount = idx;
+                else if (h === "due since") colMap.dueSince = idx;
+                else if (h === "salesman") colMap.salesman = idx;
+                else if (h === "ledger" || h === "account" || h === "group" || h === "type") colMap.ledger = idx;
+              });
+              break;
+            }
+          }
+
+          if (headerRowIdx === -1) {
+            showToast("Could not find header row ('Segment', 'Party Name', 'Bill No') in RealBooks file.", "error");
+            return;
+          }
+
+          Object.values(appState.bills).forEach((b) => {
+            b.isNew = false;
+          });
+
+          const seenKeysToday = new Set();
+          let activeMatchedCount = 0;
+          let newBillsCount = 0;
+          let updatedPaymentsCount = 0;
+
+          for (let i = headerRowIdx + 1; i < rows.length; i++) {
+            const row = rows[i];
+            const firstCell = String(row[0] || "").trim();
+            const segment = String(row[colMap.segment] || "").trim();
+
+            if (/^total /i.test(firstCell) || /^date\s*:/i.test(firstCell) || /^total /i.test(segment)) {
+              continue;
+            }
+            if (segment.toLowerCase() !== TARGET_SEGMENT.toLowerCase()) {
+              continue;
+            }
+
+            const partyName = String(row[colMap.partyName] || "").trim();
+            const billDate = normalizeDate(row[colMap.date]);
+            const billNo = String(row[colMap.billNo] || "").trim();
+            if (!billNo && !partyName) continue;
+
+            const billAmt = parseNum(row[colMap.billAmount]);
+            const paidAmt = parseNum(row[colMap.paidAmount]);
+            const balAmt = parseNum(row[colMap.balanceAmount]);
+            const dueSince = colMap.dueSince !== undefined ? parseNum(row[colMap.dueSince]) : 0;
+            const salesman = colMap.salesman !== undefined ? String(row[colMap.salesman] || "").trim() : "";
+            const rawLedger = colMap.ledger !== undefined ? String(row[colMap.ledger] || "").trim() : "";
+            const category = inferLedgerType(billNo, rawLedger);
+
+            activeMatchedCount++;
+            const existingKey = findExistingBillKey(partyName, billNo, billDate);
+
+            if (!existingKey) {
+              const newKey = makeCompositeKey(partyName, billNo, billDate);
+              seenKeysToday.add(newKey);
+              newBillsCount++;
+
+              appState.bills[newKey] = {
+                key: newKey,
+                billNo,
+                partyName,
+                date: billDate,
+                category,
+                ledger: rawLedger,
+                billAmount: billAmt,
+                paidAmount: paidAmt,
+                balanceAmount: balAmt,
+                dueSince,
+                salesman,
+                remark: "",
+                status: "Active",
+                isNew: true,
+                history: [
+                  {
+                    timestamp: reportDateLabel,
+                    type: "NEW_BILL",
+                    note: `New Bill Added from RealBooks (${category}). Balance: ₹${formatCurrency(balAmt)}`,
+                    billAmount: billAmt,
+                    paidAmount: paidAmt,
+                    balanceAmount: balAmt
+                  }
+                ]
+              };
+            } else {
+              seenKeysToday.add(existingKey);
+              const existing = appState.bills[existingKey];
+              const prevPaid = existing.paidAmount || 0;
+              const prevBal = existing.balanceAmount || 0;
+
+              existing.partyName = partyName || existing.partyName;
+              existing.date = billDate || existing.date;
+              if (category !== "OTHER") existing.category = category;
+              if (rawLedger) existing.ledger = rawLedger;
+              existing.billAmount = billAmt;
+              existing.paidAmount = paidAmt;
+              existing.balanceAmount = balAmt;
+              existing.dueSince = dueSince;
+              existing.salesman = salesman || existing.salesman;
+              existing.status = "Active";
+
+              if (Math.abs(prevPaid - paidAmt) > 0.01 || Math.abs(prevBal - balAmt) > 0.01) {
+                updatedPaymentsCount++;
+                const diff = prevBal - balAmt;
+                const changeText =
+                  diff > 0
+                    ? `Paid ₹${formatCurrency(diff)} (Paid: ₹${formatCurrency(prevPaid)} → ₹${formatCurrency(paidAmt)}, Bal: ₹${formatCurrency(prevBal)} → ₹${formatCurrency(balAmt)})`
+                    : `Balance updated: ₹${formatCurrency(prevBal)} → ₹${formatCurrency(balAmt)}`;
+
+                existing.history.unshift({
+                  timestamp: reportDateLabel,
+                  type: "PAYMENT_UPDATE",
+                  note: changeText,
+                  billAmount: billAmt,
+                  paidAmount: paidAmt,
+                  balanceAmount: balAmt
+                });
+              }
+            }
+          }
+
+          let clearedCount = 0;
+          Object.keys(appState.bills).forEach((k) => {
+            const bill = appState.bills[k];
+            if (!seenKeysToday.has(k) && bill.status === "Active") {
+              bill.status = "Cleared";
+              bill.balanceAmount = 0;
+              clearedCount++;
+              bill.history.unshift({
+                timestamp: reportDateLabel,
+                type: "CLEARED",
+                note: `Cleared / Removed from RealBooks pending report (Balance set to ₹0.00).`,
+                billAmount: bill.billAmount,
+                paidAmount: bill.billAmount,
+                balanceAmount: 0
+              });
+            }
+          });
+
+          appState.lastRealBooksImport = `${file.name} (As On ${reportDateLabel})`;
+          await saveDatabase();
+          refreshUI();
+
+          showToast(
+            `RealBooks (${reportDateLabel}): ${activeMatchedCount} active bills (${newBillsCount} new, ${updatedPaymentsCount} updates, ${clearedCount} cleared) synced!`,
+            "success"
+          );
+        } catch (err) {
+          console.error(err);
+          showToast("Error reading RealBooks file: " + err.message, "error");
+        }
+      };
+      reader.readAsArrayBuffer(file);
+      event.target.value = "";
+    }
+
+    function handleAnalysisReportUpload(event) {
+      if (isReadOnly) return;
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        try {
+          const data = new Uint8Array(e.target.result);
+          const workbook = XLSX.read(data, { type: "array" });
+          const todayLabel = getTodayStr();
+
+          weeklyFilteredSheets = {};
+          const summaryCounts = [];
+          let totalMatched = 0;
+
+          const outHeaders = [
+            "Segment",
+            "Party Name",
+            "Date",
+            "Bill No",
+            "Bill Amount",
+            "Paid Amount",
+            "Balance Amount",
+            "Due Since",
+            "Upto 30",
+            "31 - 60",
+            "61 - 90",
+            "Grt 90",
+            "Salesman",
+            "REMARKS"
+          ];
+
+          TARGET_SHEETS.forEach((sheetName) => {
+            const actualSheetName = workbook.SheetNames.find((s) => s.trim().toUpperCase() === sheetName);
+            const aoa = [outHeaders];
+            let sheetCount = 0;
+
+            if (actualSheetName) {
+              const sheet = workbook.Sheets[actualSheetName];
+              const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
+
+              for (let i = 1; i < rows.length; i++) {
+                const row = rows[i];
+                const segment = String(row[0] || "").trim();
+                if (segment.toLowerCase() !== TARGET_SEGMENT.toLowerCase()) continue;
+
+                const partyName = String(row[1] || "").trim();
+                const billDate = normalizeDate(row[2]);
+                const billNo = String(row[3] || "").trim();
+                const billAmt = parseNum(row[4]);
+                const paidAmt = parseNum(row[5]);
+                const balAmt = parseNum(row[6]);
+                const dueSince = parseNum(row[7]);
+                const upto30 = parseNum(row[8]);
+                const d31_60 = parseNum(row[9]);
+                const d61_90 = parseNum(row[10]);
+                const grt90 = parseNum(row[11]);
+                const salesman = String(row[12] || "").trim();
+
+                const matchedKey = findExistingBillKey(partyName, billNo, billDate);
+                let matchedRemark = "";
+                if (matchedKey && appState.bills[matchedKey]) {
+                  matchedRemark = appState.bills[matchedKey].remark || "";
+                  appState.bills[matchedKey].category = sheetName;
+                  appState.bills[matchedKey].dueSince = dueSince;
+                }
+
+                aoa.push([
+                  TARGET_SEGMENT,
+                  partyName,
+                  billDate,
+                  billNo,
+                  billAmt,
+                  paidAmt,
+                  balAmt,
+                  dueSince,
+                  upto30,
+                  d31_60,
+                  d61_90,
+                  grt90,
+                  salesman,
+                  matchedRemark
+                ]);
+
+                sheetCount++;
+                totalMatched++;
+              }
+            }
+
+            weeklyFilteredSheets[sheetName] = aoa;
+            summaryCounts.push(`${sheetName}: ${sheetCount}`);
+          });
+
+          appState.lastAnalysisImport = `${file.name} (${todayLabel})`;
+          await saveDatabase();
+          refreshUI();
+
+          const strip = document.getElementById("weeklySummaryStrip");
+          strip.innerHTML = summaryCounts
+            .map((txt) => `<span class="px-2 py-0.5 rounded bg-emerald-50 border border-emerald-200">${txt}</span>`)
+            .join("");
+          strip.classList.remove("hidden");
+
+          document.getElementById("btnDownloadFilteredAnalysis").disabled = false;
+          showToast(`Filtered ${totalMatched} Bannur Road bills across 6 sheets! Click 'Download Filtered Excel'.`, "success");
+        } catch (err) {
+          console.error(err);
+          showToast("Error processing Weekly Analysis Report: " + err.message, "error");
+        }
+      };
+      reader.readAsArrayBuffer(file);
+      event.target.value = "";
+    }
+
+    function downloadFilteredAnalysisReport() {
+      if (!weeklyFilteredSheets) {
+        showToast("Please upload the Weekly Accounts Analysis Report first.", "warning");
+        return;
+      }
+
+      const wb = XLSX.utils.book_new();
+      const colWidths = [
+        { wch: 22 }, { wch: 36 }, { wch: 12 }, { wch: 18 },
+        { wch: 14 }, { wch: 14 }, { wch: 15 }, { wch: 10 },
+        { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 },
+        { wch: 22 }, { wch: 24 }
+      ];
+
+      TARGET_SHEETS.forEach((sheetName) => {
+        const aoa = weeklyFilteredSheets[sheetName] || [];
+        const updatedAoa = aoa.map((row, idx) => {
+          if (idx === 0) return row;
+          const partyName = row[1];
+          const billDate = row[2];
+          const billNo = row[3];
+          const matchedKey = findExistingBillKey(partyName, billNo, billDate);
+          const latestRemark = matchedKey && appState.bills[matchedKey] ? appState.bills[matchedKey].remark || "" : row[13];
+          const copyRow = [...row];
+          copyRow[13] = latestRemark;
+          return copyRow;
+        });
+
+        const ws = XLSX.utils.aoa_to_sheet(updatedAoa);
+        ws["!cols"] = colWidths;
+        XLSX.utils.book_append_sheet(wb, ws, sheetName);
+      });
+
+      const masterAoa = buildMasterPendingAOA();
+      const wsMaster = XLSX.utils.aoa_to_sheet(masterAoa);
+      wsMaster["!cols"] = [
+        { wch: 38 }, { wch: 12 }, { wch: 18 }, { wch: 14 },
+        { wch: 14 }, { wch: 15 }, { wch: 22 }, { wch: 24 }
+      ];
+      XLSX.utils.book_append_sheet(wb, wsMaster, "Master_Pending");
+
+      XLSX.writeFile(wb, `Bannur_Road_Analysis_Filtered_${getTodayStr()}.xlsx`);
+      showToast("Downloaded Filtered 6-Sheet Analysis Report + Master_Pending!", "success");
+    }
+
+    function buildMasterPendingAOA() {
+      const headers = [
+        "Party Name",
+        "Date",
+        "Bill No",
+        "Bill Amount",
+        "Paid Amount",
+        "Balance Amount",
+        "Salesman",
+        "REMARKS"
+      ];
+      const aoa = [headers];
+      Object.values(appState.bills)
+        .filter((b) => b.status === "Active")
+        .forEach((b) => {
+          aoa.push([
+            b.partyName,
+            b.date,
+            b.billNo,
+            b.billAmount,
+            b.paidAmount,
+            b.balanceAmount,
+            b.salesman,
+            b.remark || ""
+          ]);
+        });
+      return aoa;
+    }
+
+    function exportMasterPendingExcel() {
+      const aoa = buildMasterPendingAOA();
+      if (aoa.length <= 1) {
+        showToast("No active bills available to export.", "warning");
+        return;
+      }
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.aoa_to_sheet(aoa);
+      ws["!cols"] = [
+        { wch: 38 }, { wch: 12 }, { wch: 18 }, { wch: 14 },
+        { wch: 14 }, { wch: 15 }, { wch: 22 }, { wch: 24 }
+      ];
+      XLSX.utils.book_append_sheet(wb, ws, "Master_Pending");
+      XLSX.writeFile(wb, `Master_Pending_Bannur_Road_${getTodayStr()}.xlsx`);
+      showToast(`Exported ${aoa.length - 1} active bills to Master_Pending Excel!`, "success");
+    }
+
+    async function updateBillRemark(billKey, newRemarkRaw) {
+      if (isReadOnly) {
+        showToast("Unlock Edit Mode first to change remarks.", "warning");
+        return;
+      }
+      const bill = appState.bills[billKey];
+      if (!bill) return;
+
+      const newRemark = String(newRemarkRaw || "").trim();
+      if (bill.remark === newRemark) return;
+
+      const oldRemark = bill.remark || "(Blank)";
+      bill.remark = newRemark;
+      bill.history.unshift({
+        timestamp: new Date().toLocaleString("en-IN"),
+        type: "REMARK",
+        note: `Remark changed: "${oldRemark}" → "${newRemark || "(Blank)"}"`,
+        billAmount: bill.billAmount,
+        paidAmount: bill.paidAmount,
+        balanceAmount: bill.balanceAmount
+      });
+
+      await saveDatabase();
+      updateKPIs();
+
+      if (activeModalKey === billKey) {
+        document.getElementById("modalRemark").textContent = bill.remark || "(Blank)";
+        renderModalTimeline(bill);
+      }
+      showToast(`Saved & synced remark for ${bill.billNo}`, "success");
+    }
+
+    function openHistoryModal(billKey) {
+      const bill = appState.bills[billKey];
+      if (!bill) return;
+
+      activeModalKey = billKey;
+      document.getElementById("modalCategoryBadge").textContent = bill.category || "BILL";
+      document.getElementById("modalBillNo").textContent = bill.billNo;
+      document.getElementById("modalStatusBadge").textContent = bill.status.toUpperCase();
+      document.getElementById("modalStatusBadge").className =
+        bill.status === "Cleared"
+          ? "px-2 py-0.5 text-[10px] font-bold uppercase rounded bg-emerald-600 text-white"
+          : "px-2 py-0.5 text-[10px] font-bold uppercase rounded bg-amber-500 text-slate-950";
+
+      document.getElementById("modalPartyName").textContent = bill.partyName;
+      document.getElementById("modalBillDate").textContent = bill.date || "-";
+      document.getElementById("modalSalesman").textContent = bill.salesman || "-";
+      document.getElementById("modalBalance").textContent = `₹${formatCurrency(bill.balanceAmount)}`;
+      document.getElementById("modalRemark").textContent = bill.remark || "(Blank)";
+      document.getElementById("followupNoteInput").value = "";
+
+      const chipContainer = document.getElementById("modalQuickRemarkChips");
+      chipContainer.innerHTML = QUICK_REMARKS.map(
+        (rem) => `
+          <button onclick="applyQuickRemarkInModal('${rem}')" class="px-2.5 py-1 rounded-lg text-xs font-semibold border transition cursor-pointer ${
+            bill.remark === rem
+              ? "bg-indigo-600 text-white border-indigo-600"
+              : "bg-slate-100 hover:bg-indigo-50 text-slate-700 border-slate-200"
+          }">
+            ${rem}
+          </button>
+        `
+      ).join("");
+
+      renderModalTimeline(bill);
+      document.getElementById("historyModal").classList.remove("hidden");
+    }
+
+    async function applyQuickRemarkInModal(rem) {
+      if (!activeModalKey || isReadOnly) return;
+      await updateBillRemark(activeModalKey, rem);
+      openHistoryModal(activeModalKey);
+      renderTable();
+    }
+
+    function closeHistoryModal() {
+      activeModalKey = null;
+      document.getElementById("historyModal").classList.add("hidden");
+    }
+
+    async function addFollowupNote() {
+      if (!activeModalKey || isReadOnly) return;
+      const input = document.getElementById("followupNoteInput");
+      const noteText = input.value.trim();
+      if (!noteText) return;
+
+      const bill = appState.bills[activeModalKey];
+      bill.history.unshift({
+        timestamp: new Date().toLocaleString("en-IN"),
+        type: "FOLLOWUP",
+        note: `Follow-up: ${noteText}`,
+        billAmount: bill.billAmount,
+        paidAmount: bill.paidAmount,
+        balanceAmount: bill.balanceAmount
+      });
+
+      input.value = "";
+      await saveDatabase();
+      renderModalTimeline(bill);
+      renderTable();
+      showToast("Follow-up note saved & synced!", "success");
+    }
+
+    function renderModalTimeline(bill) {
+      const container = document.getElementById("modalTimeline");
+      if (!bill.history || bill.history.length === 0) {
+        container.innerHTML = `<p class="text-xs text-slate-400">No history events recorded yet.</p>`;
+        return;
+      }
+
+      container.innerHTML = bill.history
+        .map((item) => {
+          let badgeColor = "bg-slate-200 text-slate-700";
+          if (item.type === "PAYMENT_UPDATE") badgeColor = "bg-emerald-100 text-emerald-800";
+          if (item.type === "REMARK") badgeColor = "bg-indigo-100 text-indigo-800";
+          if (item.type === "FOLLOWUP") badgeColor = "bg-amber-100 text-amber-800";
+          if (item.type === "CLEARED") badgeColor = "bg-teal-100 text-teal-800";
+          if (item.type === "NEW_BILL") badgeColor = "bg-sky-100 text-sky-800";
+
+          const snapshotHtml =
+            item.billAmount !== undefined
+              ? `<div class="mt-1.5 flex flex-wrap gap-3 text-[11px] text-slate-500 font-mono">
+                   <span>Bill: ₹${formatCurrency(item.billAmount)}</span>
+                   <span>Paid: ₹${formatCurrency(item.paidAmount)}</span>
+                   <span class="font-semibold text-slate-700">Bal: ₹${formatCurrency(item.balanceAmount)}</span>
+                 </div>`
+              : "";
+
+          return `
+            <div class="relative bg-slate-50 border border-slate-200 rounded-xl p-3">
+              <span class="w-2.5 h-2.5 rounded-full bg-indigo-500 absolute -left-[21px] top-4 ring-4 ring-white"></span>
+              <div class="flex items-center justify-between gap-2 mb-1">
+                <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase ${badgeColor}">${item.type}</span>
+                <span class="text-[11px] text-slate-400">${escapeHtml(item.timestamp)}</span>
+              </div>
+              <p class="text-xs sm:text-sm text-slate-800 font-medium">${escapeHtml(item.note)}</p>
+              ${snapshotHtml}
+            </div>
+          `;
+        })
+        .join("");
+    }
+
+    function refreshUI() {
+      if (appState.lastMasterImport) {
+        document.getElementById("masterLastLoaded").textContent = appState.lastMasterImport;
+      }
+      if (appState.lastRealBooksImport) {
+        document.getElementById("realbooksLastLoaded").textContent = appState.lastRealBooksImport;
+      }
+      if (appState.lastAnalysisImport) {
+        document.getElementById("analysisLastLoaded").textContent = appState.lastAnalysisImport;
+      }
+      updateKPIs();
+      renderTable();
+    }
+
+    function updateKPIs() {
+      const allBills = Object.values(appState.bills || {});
+      const activeBills = allBills.filter((b) => b.status === "Active");
+      const clearedBills = allBills.filter((b) => b.status === "Cleared");
+      const newTodayCount = activeBills.filter((b) => b.isNew).length;
+
+      const totalBalance = activeBills.reduce((sum, b) => sum + (b.balanceAmount || 0), 0);
+      const blankRemarksCount = activeBills.filter((b) => !b.remark || b.remark.trim() === "").length;
+
+      const insuranceBills = activeBills.filter(
+        (b) => b.category === "BI" || /insurance/i.test(b.category || "") || /insurance/i.test(b.ledger || "")
+      );
+      const insuranceBalance = insuranceBills.reduce((sum, b) => sum + (b.balanceAmount || 0), 0);
+
+      const retailBills = activeBills.filter((b) => b.category === "BC" || b.category === "BR");
+      const retailBalance = retailBills.reduce((sum, b) => sum + (b.balanceAmount || 0), 0);
+
+      document.getElementById("kpiActiveCount").textContent = activeBills.length;
+      document.getElementById("kpiNewTodayCount").textContent = `${newTodayCount} new today`;
+      document.getElementById("kpiTotalBalance").textContent = `₹${formatCurrency(totalBalance)}`;
+      document.getElementById("kpiBlankRemarks").textContent = `${blankRemarksCount} blank remarks`;
+      document.getElementById("kpiInsuranceBalance").textContent = `₹${formatCurrency(insuranceBalance)}`;
+      document.getElementById("kpiInsuranceCount").textContent = `${insuranceBills.length} bills`;
+      document.getElementById("kpiRetailBalance").textContent = `₹${formatCurrency(retailBalance)}`;
+      document.getElementById("kpiRetailCount").textContent = `${retailBills.length} bills`;
+      document.getElementById("kpiClearedCount").textContent = clearedBills.length;
+      document.getElementById("kpiTotalTracked").textContent = `${allBills.length} total in history DB`;
+    }
+
+    function setStatusFilter(status) {
+      currentStatusFilter = status;
+      document.querySelectorAll(".status-pill").forEach((btn) => {
+        if (btn.dataset.status === status) {
+          btn.className = "status-pill active px-3 py-1 rounded-lg text-xs font-semibold bg-indigo-600 text-white cursor-pointer";
+        } else {
+          btn.className = "status-pill px-3 py-1 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 cursor-pointer";
+        }
+      });
+      resetPageAndRender();
+    }
+
+    function setCategoryFilter(cat) {
+      currentCategoryFilter = cat;
+      document.querySelectorAll(".cat-pill").forEach((btn) => {
+        if (btn.dataset.cat === cat) {
+          btn.className = "cat-pill active px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-900 text-white cursor-pointer";
+        } else {
+          btn.className = "cat-pill px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 cursor-pointer";
+        }
+      });
+      resetPageAndRender();
+    }
+
+    function resetPageAndRender() {
+      currentPage = 1;
+      renderTable();
+    }
+
+    function changePage(delta) {
+      currentPage += delta;
+      renderTable();
+    }
+
+    function renderTable() {
+      const tbody = document.getElementById("billsTableBody");
+      const searchVal = document.getElementById("searchInput").value.trim().toLowerCase();
+      const remarkStatus = document.getElementById("remarkFilter").value;
+
+      let filtered = Object.values(appState.bills || {}).filter((b) => {
+        if (currentStatusFilter === "ACTIVE" && b.status !== "Active") return false;
+        if (currentStatusFilter === "NEW_TODAY" && !(b.status === "Active" && b.isNew)) return false;
+        if (currentStatusFilter === "CLEARED" && b.status !== "Cleared") return false;
+
+        if (currentCategoryFilter !== "ALL") {
+          const catMatch =
+            normalizeStr(b.category) === normalizeStr(currentCategoryFilter) ||
+            normalizeStr(b.ledger) === normalizeStr(currentCategoryFilter);
+          if (!catMatch) return false;
+        }
+
+        const hasRemark = b.remark && b.remark.trim() !== "";
+        if (remarkStatus === "BLANK" && hasRemark) return false;
+        if (remarkStatus === "FILLED" && !hasRemark) return false;
+
+        if (searchVal) {
+          const hay = `${b.partyName} ${b.billNo} ${b.salesman} ${b.remark} ${b.category} ${b.ledger}`.toLowerCase();
+          if (!hay.includes(searchVal)) return false;
+        }
+        return true;
+      });
+
+      filtered.sort((a, b) => {
+        if (a.isNew !== b.isNew) return a.isNew ? -1 : 1;
+        return (b.dueSince || 0) - (a.dueSince || 0);
+      });
+
+      const totalRows = filtered.length;
+      const totalPages = Math.max(1, Math.ceil(totalRows / PAGE_SIZE));
+      if (currentPage > totalPages) currentPage = totalPages;
+      if (currentPage < 1) currentPage = 1;
+
+      const startIdx = (currentPage - 1) * PAGE_SIZE;
+      const pageRows = filtered.slice(startIdx, startIdx + PAGE_SIZE);
+
+      document.getElementById("tableCountInfo").textContent =
+        totalRows === 0
+          ? "Showing 0 bills"
+          : `Showing ${startIdx + 1}–${Math.min(startIdx + PAGE_SIZE, totalRows)} of ${totalRows} bills`;
+      document.getElementById("pageIndicator").textContent = `Page ${currentPage} of ${totalPages}`;
+      document.getElementById("btnPrevPage").disabled = currentPage <= 1;
+      document.getElementById("btnNextPage").disabled = currentPage >= totalPages;
+
+      if (pageRows.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="11" class="py-10 text-center text-slate-400">
+              No matching bills found for the current filters.
+            </td>
+          </tr>
+        `;
+        return;
+      }
+
+      tbody.innerHTML = pageRows
+        .map((b) => {
+          const isCleared = b.status === "Cleared";
+          const rowBg = isCleared
+            ? "bg-emerald-50/40"
+            : b.isNew
+            ? "bg-sky-50/50 hover:bg-sky-50"
+            : "hover:bg-slate-50";
+
+          const dueBadge =
+            b.dueSince > 90
+              ? "bg-rose-100 text-rose-700"
+              : b.dueSince > 30
+              ? "bg-amber-100 text-amber-800"
+              : "bg-slate-100 text-slate-700";
+
+          const typeLabel = b.category && b.category !== "OTHER" ? b.category : b.ledger || "OTHER";
+
+          const remarkCellHtml = isReadOnly
+            ? b.remark
+              ? `<span class="inline-block px-2.5 py-1 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs font-semibold">${escapeHtml(b.remark)}</span>`
+              : `<span class="text-xs text-slate-400 italic">-</span>`
+            : `<div class="space-y-1">
+                <input
+                  type="text"
+                  list="remarkSuggestions"
+                  value="${escapeHtml(b.remark || "")}"
+                  placeholder="Select or type remark..."
+                  onchange="updateBillRemark('${escapeJs(b.key)}', this.value)"
+                  class="w-full text-xs font-medium px-2.5 py-1.5 rounded-lg border ${
+                    b.remark ? "border-emerald-300 bg-emerald-50/40 text-slate-900" : "border-slate-300 bg-white text-slate-700"
+                  } focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+                <div class="flex flex-wrap gap-1">
+                  ${["INSURANCE CO", "AUTOCARD", "SMP", "DISCOUNT", "EW", "CLEARED"]
+                    .map(
+                      (chip) => `
+                      <button type="button" onclick="updateBillRemark('${escapeJs(b.key)}', '${chip}'); renderTable();" class="px-1.5 py-0.5 text-[9px] font-semibold rounded bg-slate-100 hover:bg-indigo-100 text-slate-600 hover:text-indigo-700 transition cursor-pointer">
+                        ${chip}
+                      </button>
+                    `
+                    )
+                    .join("")}
+                </div>
+              </div>`;
+
+          return `
+            <tr class="${rowBg} transition">
+              <td onclick="openHistoryModal('${escapeJs(b.key)}')" class="py-2.5 px-3 text-xs font-medium text-slate-800 max-w-[240px] truncate cursor-pointer hover:text-indigo-700" title="${escapeHtml(b.partyName)}">
+                ${escapeHtml(b.partyName)}
+              </td>
+              <td class="py-2.5 px-3 text-xs text-slate-600 whitespace-nowrap">${escapeHtml(b.date)}</td>
+              <td class="py-2.5 px-3 font-mono text-xs font-semibold text-slate-900 whitespace-nowrap">
+                <button onclick="openHistoryModal('${escapeJs(b.key)}')" class="text-indigo-600 hover:underline cursor-pointer">
+                  ${escapeHtml(b.billNo)}
+                </button>
+                ${b.isNew ? '<span class="ml-1 px-1.5 py-0.5 text-[10px] rounded bg-sky-600 text-white font-sans">NEW</span>' : ""}
+                ${isCleared ? '<span class="ml-1 px-1.5 py-0.5 text-[10px] rounded bg-emerald-100 text-emerald-800 font-sans">CLEARED</span>' : ""}
+              </td>
+              <td class="py-2.5 px-3 text-xs whitespace-nowrap">
+                <span class="px-2 py-0.5 rounded font-semibold bg-indigo-50 text-indigo-700">${escapeHtml(typeLabel)}</span>
+              </td>
+              <td class="py-2.5 px-3 text-xs text-right text-slate-600 whitespace-nowrap">₹${formatCurrency(b.billAmount)}</td>
+              <td class="py-2.5 px-3 text-xs text-right text-emerald-700 whitespace-nowrap">₹${formatCurrency(b.paidAmount)}</td>
+              <td class="py-2.5 px-3 text-xs text-right font-bold text-slate-900 whitespace-nowrap">₹${formatCurrency(b.balanceAmount)}</td>
+              <td class="py-2.5 px-3 text-center">
+                <span class="px-2 py-0.5 rounded-full text-[11px] font-semibold ${dueBadge}">${b.dueSince || 0}d</span>
+              </td>
+              <td class="py-2.5 px-3 text-xs text-slate-700 whitespace-nowrap">${escapeHtml(b.salesman)}</td>
+              <td class="py-2.5 px-3">${remarkCellHtml}</td>
+              <td class="py-2.5 px-3 text-center">
+                <button onclick="openHistoryModal('${escapeJs(b.key)}')" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-indigo-100 text-slate-700 hover:text-indigo-700 text-xs font-semibold transition cursor-pointer">
+                  <span>History (${(b.history || []).length})</span>
+                </button>
+              </td>
+            </tr>
+          `;
+        })
+        .join("");
+    }
+
+    function formatCurrency(num) {
+      return Number(num || 0).toLocaleString("en-IN", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      });
+    }
+
+    function getTodayStr() {
+      const d = new Date();
+      const dd = String(d.getDate()).padStart(2, "0");
+      const mm = String(d.getMonth() + 1).padStart(2, "0");
+      const yyyy = d.getFullYear();
+      return `${dd}-${mm}-${yyyy}`;
+    }
+
+    function escapeHtml(str) {
+      return String(str || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    function escapeJs(str) {
+      return String(str || "").replace(/\/g, "\\").replace(/'/g, "\'");
+    }
+
+    function showToast(message, type = "info") {
+      const container = document.getElementById("toastContainer");
+      const toast = document.createElement("div");
+      const colors = {
+        success: "bg-emerald-900 text-white border-emerald-700",
+        error: "bg-rose-900 text-white border-rose-700",
+        warning: "bg-amber-900 text-white border-amber-700",
+        info: "bg-slate-900 text-white border-slate-700"
+      };
+      toast.className = `pointer-events-auto px-4 py-3 rounded-xl border shadow-lg text-xs sm:text-sm font-medium transition-all ${colors[type] || colors.info}`;
+      toast.textContent = message;
+      container.appendChild(toast);
+      setTimeout(() => {
+        toast.classList.add("opacity-0");
+        setTimeout(() => toast.remove(), 300);
+      }, 4500);
+    }
+
+    window.addEventListener("DOMContentLoaded", async () => {
+      try {
+        const localSaved = localStorage.getItem(LOCAL_DB_STORAGE_KEY);
+        if (localSaved) {
+          appState = JSON.parse(localSaved);
+        }
+      } else (e) {
+        console.warn("Could not read localStorage:", e);
+      }
+
+      applyModeUI();
+      refreshUI();
+
+      await pullFromCloud(false);
+    });
+  </script>
+</body>
+</html>
